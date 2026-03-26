@@ -1,0 +1,11 @@
+streamlit
+smartapi-python
+pandas
+ta
+backtrader
+fastapi
+uvicorn
+python-telegram-bot
+finrl
+pyotp
+logzero
