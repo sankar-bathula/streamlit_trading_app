@@ -9,3 +9,5 @@ python-telegram-bot
 finrl
 pyotp
 logzero
+yfinance
+matplotlib

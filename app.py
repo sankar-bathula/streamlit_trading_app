@@ -8,13 +8,22 @@ import sys
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 from src.auth import connect_smartapi
+from src.backtester import run_backtest
+from src.live_breakout import LiveBreakoutBot
+import time
 
 st.set_page_config(page_title="Algorithmic Trading Dashboard", layout="wide", page_icon="📈")
 
 st.title("Algorithmic Trading Dashboard")
 
 st.sidebar.header("Navigation")
-page = st.sidebar.radio("Go to", ["Dashboard", "Backtesting", "Settings"])
+page = st.sidebar.radio("Go to", ["Dashboard", "Backtesting", "Live Trading", "Settings"])
+
+if "smart_api" not in st.session_state:
+    st.session_state.smart_api = None
+
+if "live_bot" not in st.session_state:
+    st.session_state.live_bot = None
 
 if "smart_api" not in st.session_state:
     st.session_state.smart_api = None
@@ -60,11 +69,99 @@ if page == "Dashboard":
             st.error(f"Could not load alerts: {e}")
             
 elif page == "Backtesting":
-    st.subheader("Backtrader Engine")
-    st.write("Select a strategy and click 'Run' to see backtest results.")
-    if st.button("Run Backtest"):
-        st.info("Backtesting engine execution triggered.")
-        # Future: call src.backtester
+    st.subheader("Backtrader Engine: Nifty 5-Min ORB")
+    
+    st.write("Configure the Opening Range Breakout parameters:")
+    col1, col2 = st.columns(2)
+    with col1:
+        orb_start_str = st.text_input("ORB Start Time (HH:MM)", value="09:15")
+        orb_end_str = st.text_input("ORB End Time (HH:MM)", value="09:20")
+        exit_time_str = st.text_input("Intraday Exit Time (HH:MM)", value="15:10")
+        
+    with col2:
+        stop_loss_pct = st.number_input("Stop Loss %", value=0.5, step=0.1) / 100.0
+        target_pct = st.number_input("Target %", value=1.5, step=0.1) / 100.0
+        cash = st.number_input("Starting Capital", value=100000)
+        
+    if st.button("Run Nifty 5-Min Backtest"):
+        with st.spinner("Downloading ^NSEI 5-min data and running backtest..."):
+            try:
+                # Run the backtest using our backtester engine
+                cerebro, result = run_backtest(cash=cash, print_log=False)
+                final_val = cerebro.broker.getvalue()
+                
+                st.success("Backtest Completed!")
+                st.metric("Final Portfolio Value", f"₹ {final_val:.2f}", f"₹ {final_val - cash:.2f}")
+                
+                # Plot the result using matplotlib
+                import matplotlib
+                matplotlib.use('Agg') # Ensure Streamlit compatibility
+                
+                # Capture the plot
+                fig = cerebro.plot(style='candlestick', barup='green', bardown='red')[0][0]
+                st.pyplot(fig)
+                
+            except Exception as e:
+                st.error(f"Error during backtesting: {e}")
+
+elif page == "Live Trading":
+    st.subheader("Live Market Execution: 5-Min ORB")
+    st.write("Automatically trades the Opening Range Breakout using Angel One execution and Auto Step-Up Trailing SL.")
+    
+    col1, col2 = st.columns(2)
+    with col1:
+        trade_symbol = st.text_input("Underlying Symbol (for ORB monitoring)", value="NIFTY27FEB26FUT")
+        trade_token = st.text_input("Underlying Token", value="57072")
+        trade_exchange = st.text_input("Exchange (usually NFO for futures)", value="NFO")
+        
+    with col2:
+        target_pct = st.number_input("Target Profit %", value=1.5, step=0.1)
+        stop_loss_pct = st.number_input("Initial Stop Loss %", value=0.5, step=0.1)
+        trailing_sl_step = st.number_input("Trailing SL Step %", value=0.2, step=0.1)
+        qty = st.number_input("Quantity (Lots/Shares)", value=25, step=25)
+        
+    st.markdown("---")
+    res_col1, res_col2 = st.columns([1, 2])
+    
+    with res_col1:
+        st.write("Bot Control")
+        if st.session_state.live_bot and st.session_state.live_bot.running:
+            if st.button("Stop Live Bot", type="secondary"):
+                st.session_state.live_bot.stop()
+                st.success("Stop signal sent.")
+        else:
+            if st.button("Start Live Bot", type="primary"):
+                bot = LiveBreakoutBot(trade_symbol, trade_token, trade_exchange, 
+                                      target_pct, stop_loss_pct, trailing_sl_step,
+                                      qty=qty)
+                st.session_state.live_bot = bot
+                bot.start()
+                st.success("Live Bot started in background!")
+                
+        # Status
+        bot = st.session_state.live_bot
+        if bot:
+            status_color = "green" if bot.running else "red"
+            st.markdown(f"**Status:** :{status_color}[{bot.status}]")
+            st.write(f"**ORB High:** {bot.orb_high}")
+            st.write(f"**ORB Low:** {bot.orb_low}")
+            st.write(f"**Position:** {bot.position['side']} ({bot.position['qty']})")
+            if bot.position['qty'] > 0:
+                st.write(f"**Entry Price:** {bot.position['entry_price']}")
+                st.write(f"**Current SL:** {bot.current_sl:.2f}")
+
+    with res_col2:
+        st.write("Bot Logs")
+        if st.button("Refresh Logs"):
+            pass # Streamlit natively refreshes on button click
+            
+        logs_box = st.container(height=300)
+        bot = st.session_state.live_bot
+        if bot and len(bot.logs) > 0:
+            for l in reversed(bot.logs):
+                logs_box.text(l)
+        else:
+            logs_box.info("No logs generated yet.")
 
 elif page == "Settings":
     st.subheader("Configuration")
