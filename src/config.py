@@ -14,10 +14,13 @@ try:
 
     TELEGRAM_BOT_TOKEN = creds.telegram_bot_token
     TELEGRAM_CHAT_ID = creds.telegram_chat_id
+    
+    ANTHROPIC_API_KEY = getattr(creds, 'anthropic_api_key', '')
 except ImportError:
     print("Warning: creds.py not found or invalid.")
     API_KEY = CLIENT_CODE = CLIENT_PIN = TOTP_CODE = ""
     TELEGRAM_BOT_TOKEN = TELEGRAM_CHAT_ID = ""
+    ANTHROPIC_API_KEY = ""
 
 # Trading settings
 DRY_RUN = True

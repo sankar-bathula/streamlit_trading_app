@@ -11,3 +11,4 @@ pyotp
 logzero
 yfinance
 matplotlib
+anthropic

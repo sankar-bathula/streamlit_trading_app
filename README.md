@@ -27,3 +27,7 @@ This API server listens on port 8000 for POST requests (`http://localhost:8000/w
 ## Future Upgrades
 - **FinRL**: Code stubs are present in `src/finrl_agent.py` for training and calling DRL models.
 - **Backtrader**: Configured in `src/backtester.py`. Connect to historical OHLCV data to run full backtest simulations on Streamlit.
+
+git remote add origin https://github.com/sankar-bathula/streamlit_trading_app.git
+git branch -M main
+git push -u origin main

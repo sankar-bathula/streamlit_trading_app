@@ -8,3 +8,6 @@ totp_code = "H6D2W7QO7EEG3JOKCVVZVZIQYQ"
 # Telegram Settings
 telegram_bot_token = "7956675615:AAFo-d99EfHAaSoIRjqTlyDb0zGRyOqRWZw"
 telegram_chat_id = "7956675615"
+
+# Anthropic Claude Setting
+anthropic_api_key = "YOUR_ANTHROPIC_API_KEY_HERE"

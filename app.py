@@ -17,7 +17,7 @@ st.set_page_config(page_title="Algorithmic Trading Dashboard", layout="wide", pa
 st.title("Algorithmic Trading Dashboard")
 
 st.sidebar.header("Navigation")
-page = st.sidebar.radio("Go to", ["Dashboard", "Backtesting", "Live Trading", "Settings"])
+page = st.sidebar.radio("Go to", ["Dashboard", "Watchlist", "Backtesting", "Live Trading", "Settings"])
 
 if "smart_api" not in st.session_state:
     st.session_state.smart_api = None
@@ -25,8 +25,8 @@ if "smart_api" not in st.session_state:
 if "live_bot" not in st.session_state:
     st.session_state.live_bot = None
 
-if "smart_api" not in st.session_state:
-    st.session_state.smart_api = None
+if "watchlist" not in st.session_state:
+    st.session_state.watchlist = []
 
 if page == "Dashboard":
     st.subheader("Live Market Status")
@@ -67,6 +67,89 @@ if page == "Dashboard":
                 st.info("No recent alerts.")
         except Exception as e:
             st.error(f"Could not load alerts: {e}")
+            
+elif page == "Watchlist":
+    st.subheader("Live Market Watchlist")
+    st.write("Add Index, Stocks, or Options to track their Last Traded Price (LTP).")
+    
+    with st.form("add_watchlist_form", clear_on_submit=True):
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            wl_exchange = st.selectbox("Exchange", ["NSE", "NFO", "BSE", "MCX"])
+        with col2:
+            wl_symbol = st.text_input("Trading Symbol", placeholder="e.g. Nifty 50")
+        with col3:
+            wl_token = st.text_input("Token", placeholder="e.g. 99926000")
+            
+        submitted = st.form_submit_button("Add to Watchlist")
+        if submitted:
+            if wl_symbol and wl_token:
+                # Check for duplicates
+                exists = any(item['token'] == wl_token for item in st.session_state.watchlist)
+                if not exists:
+                    st.session_state.watchlist.append({
+                        "exchange": wl_exchange,
+                        "symbol": wl_symbol,
+                        "token": wl_token
+                    })
+                    st.success(f"Added {wl_symbol} to watchlist.")
+                else:
+                    st.warning("Symbol is already in watchlist.")
+            else:
+                st.error("Please provide both Trading Symbol and Token.")
+                
+    st.markdown("---")
+    
+    if len(st.session_state.watchlist) > 0:
+        if st.session_state.smart_api:
+            # Refresh button
+            col_a, col_b = st.columns([4, 1])
+            with col_a:
+                st.write("### Current Prices")
+            with col_b:
+                if st.button("🔄 Refresh Prices"):
+                    pass # Streamlit natively refreshes on button click
+            
+            # Fetch LTPs
+            data = []
+            for item in st.session_state.watchlist:
+                ltp = "Error"
+                try:
+                    res = st.session_state.smart_api.ltpData(item["exchange"], item["symbol"], item["token"])
+                    if res and res.get('status'):
+                        ltp = res['data']['ltp']
+                    else:
+                        ltp = "N/A"
+                except Exception as e:
+                    ltp = "Failed"
+                    
+                data.append({
+                    "Exchange": item["exchange"],
+                    "Symbol": item["symbol"],
+                    "Token": item["token"],
+                    "LTP": float(ltp) if isinstance(ltp, str) and ltp.replace('.', '', 1).isdigit() else ltp
+                })
+                
+            df = pd.DataFrame(data)
+            st.dataframe(df, use_container_width=True)
+            
+            # Removal
+            st.write("Remove from Watchlist:")
+            remove_options = [""] + [f"{i['symbol']} ({i['token']})" for i in st.session_state.watchlist]
+            remove_token = st.selectbox("Select Symbol to Remove", options=remove_options)
+            if st.button("Remove Selected"):
+                if remove_token:
+                    # extract token
+                    tok = remove_token.split("(")[-1].strip(")")
+                    st.session_state.watchlist = [i for i in st.session_state.watchlist if i['token'] != tok]
+                    st.rerun()
+        else:
+            st.warning("Please connect SmartAPI from the Dashboard to view live prices.")
+            df = pd.DataFrame(st.session_state.watchlist)
+            if not df.empty:
+                st.dataframe(df, use_container_width=True)
+    else:
+        st.info("Watchlist is empty. Add symbols above to track prices.")
             
 elif page == "Backtesting":
     st.subheader("Backtrader Engine: Nifty 5-Min ORB")
