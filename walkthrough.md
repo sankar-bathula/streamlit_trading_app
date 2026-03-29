@@ -20,3 +20,17 @@ On the `Live Trading` Tab of your Streamlit app:
 1. Make sure you load the app locally: `streamlit run d:\Dev_GoogleAntigravity\finance\streamlit_trading_app\app.py`
 2. Connect the Angel One backend on the *Dashboard*.
 3. Go to *Live Trading*, pick **Doji S&R Breakout**, set your configurations, and click **Start Bot**!
+
+Listed directory streamlit_trading_app
+Listed directory src
+Edited creds.py
+
+I have restored/created a template for your [creds.py](cci:7://file:///d:/Dev_GoogleAntigravity/finance/streamlit_trading_app/creds.py:0:0-0:0) file in the root of your project: [creds.py](file:///d:/Dev_GoogleAntigravity/finance/streamlit_trading_app/creds.py).
+
+Please make sure to fill in the following:
+*   **`api_key`**: From your Angel One Developer Portal.
+*   **`client_code`**: Your Angel One Client ID (e.g., A12345).
+*   **`client_pin`**: Your 4-digit MPIN.
+*   **`totp_code`**: **CRITICAL** - This must be your **32-character TOTP Seed Key** (the secret used to generate codes), **NOT** the 6-digit dynamic number from your authenticator app.
+
+Once you save those details in the file, your "Connect SmartAPI" button in the Streamlit app should work correctly.
