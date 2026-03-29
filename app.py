@@ -209,6 +209,9 @@ elif page == "Live Trading":
             st.info("Stop Loss is dynamically set to the high/low of the Doji candlestick.")
             doji_range_pct = st.number_input("Max Doji Body/Range Ratio", value=0.15, step=0.01)
             snr_tolerance_pct = st.number_input("S&R Tolerance %", value=0.2, step=0.1)
+            
+        st.markdown("---")
+        paper_trade = st.checkbox("Enable Paper Trading (DRY RUN)", value=True, help="Orders will be logged but not placed on the exchange.")
         
     st.markdown("---")
     res_col1, res_col2 = st.columns([1, 2])
@@ -224,12 +227,13 @@ elif page == "Live Trading":
                 if strategy_choice == "5-Min ORB":
                     bot = LiveBreakoutBot(trade_symbol, trade_token, trade_exchange, 
                                           target_pct, stop_loss_pct, trailing_sl_step,
-                                          qty=qty)
+                                          qty=qty, paper_trade=paper_trade)
                 else:
                     bot = LiveDojiSnRBot(trade_symbol, trade_token, trade_exchange, 
                                          target_pct, 0.2, qty=qty, 
                                          doji_range_pct=doji_range_pct, 
-                                         snr_tolerance_pct=snr_tolerance_pct)
+                                         snr_tolerance_pct=snr_tolerance_pct,
+                                         paper_trade=paper_trade)
                 st.session_state.live_bot = bot
                 bot.start()
                 st.success(f"{strategy_choice} Bot started in background!")
@@ -239,6 +243,9 @@ elif page == "Live Trading":
         if bot:
             status_color = "green" if bot.running else "red"
             st.markdown(f"**Bot Class:** `{bot.__class__.__name__}`")
+            mode_text = "PAPER TRADING" if getattr(bot, 'paper_trade', True) else "LIVE EXECUTION"
+            mode_color = "orange" if getattr(bot, 'paper_trade', True) else "red"
+            st.markdown(f"**Mode:** :{mode_color}[{mode_text}]")
             st.markdown(f"**Status:** :{status_color}[{bot.status}]")
             
             if strategy_choice == "5-Min ORB" and hasattr(bot, 'orb_high'):

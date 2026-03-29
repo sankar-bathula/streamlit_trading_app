@@ -9,10 +9,11 @@ from src.execution import place_order
 from src.config import DRY_RUN, POLL_INTERVAL
 
 class LiveDojiSnRBot:
-    def __init__(self, symbol, token, exchange, target_pct, trailing_step_pct, qty=25, doji_range_pct=0.15, snr_tolerance_pct=0.2):
+    def __init__(self, symbol, token, exchange, target_pct, trailing_step_pct, qty=25, doji_range_pct=0.15, snr_tolerance_pct=0.2, paper_trade=True):
         self.symbol = symbol
         self.token = token
         self.exchange = exchange
+        self.paper_trade = paper_trade
         
         # Strategy configs
         self.target_pct = target_pct / 100.0
@@ -222,7 +223,7 @@ class LiveDojiSnRBot:
                                 o_res = self.smart_api.ltpData(self.exchange, self.trade_symbol, self.trade_token)
                                 if o_res and o_res.get('status'):
                                     opt_ltp = float(o_res['data']['ltp'])
-                                    order_id = place_order(self.smart_api, self.trade_symbol, self.trade_token, self.exchange, "BUY", opt_ltp, self.qty)
+                                    order_id = place_order(self.smart_api, self.trade_symbol, self.trade_token, self.exchange, "BUY", opt_ltp, self.qty, paper_trade=self.paper_trade)
                                     if order_id:
                                         self.position = {"side": "BUY", "entry_price": opt_ltp, "qty": self.qty}
                                         underlying_sl_dist_pct = abs(ltp - (self.doji_low if self.trigger_mode == "BUY" else self.doji_high)) / ltp
@@ -245,14 +246,16 @@ class LiveDojiSnRBot:
                         opt_ltp = float(opt_res['data']['ltp'])
                         entry = self.position['entry_price']
                         
+                        # Target Hit
                         if opt_ltp >= entry * (1.0 + self.target_pct):
                             self._log(f"TARGET HIT at {opt_ltp}. Exiting Position.")
-                            place_order(self.smart_api, self.trade_symbol, self.trade_token, self.exchange, "SELL", opt_ltp, self.qty)
+                            place_order(self.smart_api, self.trade_symbol, self.trade_token, self.exchange, "SELL", opt_ltp, self.qty, paper_trade=self.paper_trade)
                             self.position['qty'] = 0
                             self.status = "Running: Scanning 5-Min Candles..."
+                        # Stop Loss Hit
                         elif opt_ltp <= self.current_sl:
                             self._log(f"STOP LOSS HIT at {opt_ltp}. Exiting Position.")
-                            place_order(self.smart_api, self.trade_symbol, self.trade_token, self.exchange, "SELL", opt_ltp, self.qty)
+                            place_order(self.smart_api, self.trade_symbol, self.trade_token, self.exchange, "SELL", opt_ltp, self.qty, paper_trade=self.paper_trade)
                             self.position['qty'] = 0
                             self.status = "Running: Scanning 5-Min Candles..."
                             
@@ -262,7 +265,7 @@ class LiveDojiSnRBot:
             if now.hour >= 15 and now.minute >= 10:
                 self._log("Market close reached. Stopping.")
                 if self.position['qty'] > 0:
-                    place_order(self.smart_api, self.trade_symbol, self.trade_token, self.exchange, "SELL", 0, self.qty)
+                    place_order(self.smart_api, self.trade_symbol, self.trade_token, self.exchange, "SELL", 0, self.qty, paper_trade=self.paper_trade)
                 self.running = False
                 self.status = "Stopped"
                 break

@@ -9,10 +9,11 @@ from src.execution import place_order
 from src.config import DRY_RUN, POLL_INTERVAL
 
 class LiveBreakoutBot:
-    def __init__(self, symbol, token, exchange, target_pct, stop_loss_pct, trailing_step_pct, qty=25):
+    def __init__(self, symbol, token, exchange, target_pct, stop_loss_pct, trailing_step_pct, qty=25, paper_trade=True):
         self.symbol = symbol
         self.token = token
         self.exchange = exchange
+        self.paper_trade = paper_trade
         
         # Convert percentages to decimals
         self.target_pct = target_pct / 100.0
@@ -153,11 +154,11 @@ class LiveBreakoutBot:
                                     # Targets and Stops Check
                                     if opt_ltp >= entry * (1.0 + self.target_pct):
                                         self._log(f"TARGET HIT at {opt_ltp}. Exiting BUY.")
-                                        place_order(self.smart_api, self.trade_symbol, self.trade_token, self.exchange, "SELL", opt_ltp, self.qty)
+                                        place_order(self.smart_api, self.trade_symbol, self.trade_token, self.exchange, "SELL", opt_ltp, self.qty, paper_trade=self.paper_trade)
                                         self.position['qty'] = 0
                                     elif opt_ltp <= self.current_sl:
                                         self._log(f"STOP LOSS HIT at {opt_ltp}. Exiting BUY.")
-                                        place_order(self.smart_api, self.trade_symbol, self.trade_token, self.exchange, "SELL", opt_ltp, self.qty)
+                                        place_order(self.smart_api, self.trade_symbol, self.trade_token, self.exchange, "SELL", opt_ltp, self.qty, paper_trade=self.paper_trade)
                                         self.position['qty'] = 0
                                         
                                 elif self.position['side'] == "SELL":
@@ -179,11 +180,11 @@ class LiveBreakoutBot:
                                     # Targets and Stops Check
                                     if opt_ltp >= entry * (1.0 + self.target_pct):
                                         self._log(f"TARGET HIT at {opt_ltp}. Exiting PE BUY.")
-                                        place_order(self.smart_api, self.trade_symbol, self.trade_token, self.exchange, "SELL", opt_ltp, self.qty)
+                                        place_order(self.smart_api, self.trade_symbol, self.trade_token, self.exchange, "SELL", opt_ltp, self.qty, paper_trade=self.paper_trade)
                                         self.position['qty'] = 0
                                     elif opt_ltp <= self.current_sl:
                                         self._log(f"STOP LOSS HIT at {opt_ltp}. Exiting PE BUY.")
-                                        place_order(self.smart_api, self.trade_symbol, self.trade_token, self.exchange, "SELL", opt_ltp, self.qty)
+                                        place_order(self.smart_api, self.trade_symbol, self.trade_token, self.exchange, "SELL", opt_ltp, self.qty, paper_trade=self.paper_trade)
                                         self.position['qty'] = 0
 
                         # --- Entry Logic ---
@@ -215,7 +216,7 @@ class LiveBreakoutBot:
                                         self._log(f"Option Premium: {opt_ltp}")
                                         
                                         # Execute Trade (We BUY the option either way - CE for Breakout, PE for Breakdown)
-                                        order_id = place_order(self.smart_api, self.trade_symbol, self.trade_token, self.exchange, "BUY", opt_ltp, self.qty)
+                                        order_id = place_order(self.smart_api, self.trade_symbol, self.trade_token, self.exchange, "BUY", opt_ltp, self.qty, paper_trade=self.paper_trade)
                                         if order_id:
                                             # We track our trade as a "BUY" in terms of option premium
                                             # regardless if it's CE or PE
@@ -237,7 +238,7 @@ class LiveBreakoutBot:
                 self._log("Market close (3:10 PM) reached. Squaring off and stopping.")
                 if self.position['qty'] > 0:
                     # We are always LONG on the option (CE or PE), so square off is a SELL
-                    place_order(self.smart_api, self.trade_symbol, self.trade_token, self.exchange, "SELL", 0, self.qty)
+                    place_order(self.smart_api, self.trade_symbol, self.trade_token, self.exchange, "SELL", 0, self.qty, paper_trade=self.paper_trade)
                 self.running = False
                 self.status = "Stopped (Market Closed)"
                 break

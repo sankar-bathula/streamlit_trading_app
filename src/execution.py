@@ -2,13 +2,14 @@ from SmartApi import SmartConnect
 from logzero import logger
 from src.config import DRY_RUN
 
-def place_order(smart_api: SmartConnect, symbol: str, token: str, exchange: str, side: str, price: float, qty: int) -> str | None:
+def place_order(smart_api: SmartConnect, symbol: str, token: str, exchange: str, side: str, price: float, qty: int, paper_trade: bool = None) -> str | None:
     """
     Place an intraday MIS market/limit order.
     """
-    if DRY_RUN:
-        logger.info(f"[DRY RUN] Would place {side} {qty}x {symbol} @ ~{price}")
-        return "DRY_RUN_ID"
+    is_dry = DRY_RUN if paper_trade is None else paper_trade
+    if is_dry:
+        logger.info(f"[PAPER TRADE] Would place {side} {qty}x {symbol} @ ~{price}")
+        return "PAPER_TRADE_ID"
 
     params = {
         "variety": "NORMAL",
