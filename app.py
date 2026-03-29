@@ -10,6 +10,7 @@ sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 from src.auth import connect_smartapi
 from src.backtester import run_backtest
 from src.live_breakout import LiveBreakoutBot
+from src.strategies.doji_snr_live import LiveDojiSnRBot
 import time
 
 st.set_page_config(page_title="Algorithmic Trading Dashboard", layout="wide", page_icon="📈")
@@ -188,20 +189,26 @@ elif page == "Backtesting":
                 st.error(f"Error during backtesting: {e}")
 
 elif page == "Live Trading":
-    st.subheader("Live Market Execution: 5-Min ORB")
-    st.write("Automatically trades the Opening Range Breakout using Angel One execution and Auto Step-Up Trailing SL.")
+    st.subheader("Live Market Execution")
+    strategy_choice = st.radio("Select Strategy Algorithm", ["5-Min ORB", "Doji S&R Breakout"], horizontal=True)
     
     col1, col2 = st.columns(2)
     with col1:
-        trade_symbol = st.text_input("Underlying Symbol (for ORB monitoring)", value="NIFTY27FEB26FUT")
+        trade_symbol = st.text_input("Underlying Symbol", value="NIFTY27FEB26FUT")
         trade_token = st.text_input("Underlying Token", value="57072")
-        trade_exchange = st.text_input("Exchange (usually NFO for futures)", value="NFO")
+        trade_exchange = st.text_input("Exchange (usually NFO)", value="NFO")
         
     with col2:
         target_pct = st.number_input("Target Profit %", value=1.5, step=0.1)
-        stop_loss_pct = st.number_input("Initial Stop Loss %", value=0.5, step=0.1)
-        trailing_sl_step = st.number_input("Trailing SL Step %", value=0.2, step=0.1)
         qty = st.number_input("Quantity (Lots/Shares)", value=25, step=25)
+        
+        if strategy_choice == "5-Min ORB":
+            stop_loss_pct = st.number_input("Initial Stop Loss %", value=0.5, step=0.1)
+            trailing_sl_step = st.number_input("Trailing SL Step %", value=0.2, step=0.1)
+        else:
+            st.info("Stop Loss is dynamically set to the high/low of the Doji candlestick.")
+            doji_range_pct = st.number_input("Max Doji Body/Range Ratio", value=0.15, step=0.01)
+            snr_tolerance_pct = st.number_input("S&R Tolerance %", value=0.2, step=0.1)
         
     st.markdown("---")
     res_col1, res_col2 = st.columns([1, 2])
@@ -214,20 +221,34 @@ elif page == "Live Trading":
                 st.success("Stop signal sent.")
         else:
             if st.button("Start Live Bot", type="primary"):
-                bot = LiveBreakoutBot(trade_symbol, trade_token, trade_exchange, 
-                                      target_pct, stop_loss_pct, trailing_sl_step,
-                                      qty=qty)
+                if strategy_choice == "5-Min ORB":
+                    bot = LiveBreakoutBot(trade_symbol, trade_token, trade_exchange, 
+                                          target_pct, stop_loss_pct, trailing_sl_step,
+                                          qty=qty)
+                else:
+                    bot = LiveDojiSnRBot(trade_symbol, trade_token, trade_exchange, 
+                                         target_pct, 0.2, qty=qty, 
+                                         doji_range_pct=doji_range_pct, 
+                                         snr_tolerance_pct=snr_tolerance_pct)
                 st.session_state.live_bot = bot
                 bot.start()
-                st.success("Live Bot started in background!")
+                st.success(f"{strategy_choice} Bot started in background!")
                 
         # Status
         bot = st.session_state.live_bot
         if bot:
             status_color = "green" if bot.running else "red"
+            st.markdown(f"**Bot Class:** `{bot.__class__.__name__}`")
             st.markdown(f"**Status:** :{status_color}[{bot.status}]")
-            st.write(f"**ORB High:** {bot.orb_high}")
-            st.write(f"**ORB Low:** {bot.orb_low}")
+            
+            if strategy_choice == "5-Min ORB" and hasattr(bot, 'orb_high'):
+                st.write(f"**ORB High:** {bot.orb_high}")
+                st.write(f"**ORB Low:** {bot.orb_low}")
+            elif hasattr(bot, 'trigger_mode'):
+                st.write(f"**S&R Status:** {bot.trigger_mode or 'Waiting for Doji'}")
+                if bot.trigger_mode:
+                    st.write(f"**Doji Range:** {bot.doji_low} - {bot.doji_high}")
+            
             st.write(f"**Position:** {bot.position['side']} ({bot.position['qty']})")
             if bot.position['qty'] > 0:
                 st.write(f"**Entry Price:** {bot.position['entry_price']}")
