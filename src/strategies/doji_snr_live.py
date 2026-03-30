@@ -67,6 +67,18 @@ class LiveDojiSnRBot:
         self.running = False
         self.status = "Stopped."
 
+    def _get_strike_params(self, symbol):
+        """Determine scrip master name and strike interval based on symbol."""
+        s = symbol.upper()
+        if "BANKNIFTY" in s:
+            return "BANKNIFTY", 100
+        elif "FINNIFTY" in s:
+            return "FINNIFTY", 50
+        elif "NIFTY" in s:
+            return "NIFTY", 50
+        else:
+            return "NIFTY", 50 # Default
+
     def _fetch_pivots(self):
         # Fetch S&R using previous day's Daily Candle
         now = datetime.datetime.now()
@@ -76,15 +88,15 @@ class LiveDojiSnRBot:
         end_dt = yesterday.strftime("%Y-%m-%d 23:59")
         
         params = {
-            "exchange": "NSE", 
-            "tradingsymbol": "Nifty 50", 
-            "symboltoken": "99926000",
+            "exchange": self.exchange, 
+            "tradingsymbol": self.symbol, 
+            "symboltoken": self.token,
             "interval": "ONE_DAY",
             "fromdate": start_dt,
             "todate": end_dt,
         }
         res = self.smart_api.getCandleData(params)
-        if res and res.get('data') and len(res['data']) > 0:
+        if res and res.get('status') and res.get('data') and len(res['data']) > 0:
             prev_candle = res['data'][-1] # Last available day
             high = float(prev_candle[2])
             low = float(prev_candle[3])
@@ -97,7 +109,7 @@ class LiveDojiSnRBot:
             s2 = pp - (high - low)
             
             self.pivots = {"PP": pp, "R1": r1, "S1": s1, "R2": r2, "S2": s2}
-            self._log(f"Daily S&R levels formulated -> S2:{s2:.2f} S1:{s1:.2f} PP:{pp:.2f} R1:{r1:.2f} R2:{r2:.2f}")
+            self._log(f"Daily S&R levels formulated for {self.symbol} -> S2:{s2:.2f} S1:{s1:.2f} PP:{pp:.2f} R1:{r1:.2f} R2:{r2:.2f}")
             return True
         return False
 
@@ -136,12 +148,15 @@ class LiveDojiSnRBot:
             self.running = False
             return
             
+        name_filter, strike_step = self._get_strike_params(self.symbol)
+        
         self.status = "Loading Master Data..."
+        self._log(f"Loading OpenAPIScripMaster for {name_filter} ATM selection...")
         try:
             url = "https://margincalculator.angelbroking.com/OpenAPI_File/files/OpenAPIScripMaster.json"
             data = requests.get(url).json()
             df = pd.DataFrame(data)
-            nfo = df[(df['exch_seg'] == 'NFO') & (df['name'] == 'NIFTY') & (df['instrumenttype'] == 'OPTIDX')]
+            nfo = df[(df['exch_seg'] == 'NFO') & (df['name'] == name_filter) & (df['instrumenttype'] == 'OPTIDX')]
             nfo = nfo[nfo['expiry'] != ""]
             nfo['expiry_dt'] = pd.to_datetime(nfo['expiry'], format="%d%b%Y", errors='coerce')
             self.scrip_master = nfo.dropna(subset=['expiry_dt'])
@@ -172,9 +187,9 @@ class LiveDojiSnRBot:
                 if now.minute % 5 == 1: # Poll shortly after 5 min close
                     try:
                         params = {
-                            "exchange": "NSE", 
-                            "tradingsymbol": "Nifty 50", 
-                            "symboltoken": "99926000",
+                            "exchange": self.exchange, 
+                            "tradingsymbol": self.symbol, 
+                            "symboltoken": self.token,
                             "interval": "FIVE_MINUTE",
                             "fromdate": (now - datetime.timedelta(minutes=15)).strftime("%Y-%m-%d %H:%M"),
                             "todate": now.strftime("%Y-%m-%d %H:%M"),
@@ -209,8 +224,8 @@ class LiveDojiSnRBot:
                             self._log(f"Breakdown of S&R Doji Low at {ltp}! Going SHORT (PE).")
                             
                         if execute_entry:
-                            atm_strike = round(ltp / 50) * 50
-                            strike_str = f"{atm_strike}00.000000"
+                            atm_strike = round(ltp / strike_step) * strike_step
+                            strike_str = f"{atm_strike * 100:.6f}"
                             opt_df = self.scrip_master[
                                 (self.scrip_master['strike'] == strike_str) & 
                                 (self.scrip_master['symbol'].str.endswith(opt_type))

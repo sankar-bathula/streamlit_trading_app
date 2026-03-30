@@ -63,6 +63,18 @@ class LiveBreakoutBot:
         self.running = False
         self.status = "Stopped."
         
+    def _get_strike_params(self, symbol):
+        """Determine scrip master name and strike interval based on symbol."""
+        s = symbol.upper()
+        if "BANKNIFTY" in s:
+            return "BANKNIFTY", 100
+        elif "FINNIFTY" in s:
+            return "FINNIFTY", 50
+        elif "NIFTY" in s:
+            return "NIFTY", 50
+        else:
+            return "NIFTY", 50 # Default
+
     def _run_loop(self):
         self.smart_api = connect_smartapi()
         if not self.smart_api:
@@ -71,17 +83,26 @@ class LiveBreakoutBot:
             self.running = False
             return
             
+        name_filter, strike_step = self._get_strike_params(self.symbol)
+        
         self.status = "Downloading Scrip Master..."
-        self._log("Downloading OpenAPIScripMaster for ATM Strike selection...")
+        self._log(f"Downloading OpenAPIScripMaster for {name_filter} ATM selection...")
         try:
             url = "https://margincalculator.angelbroking.com/OpenAPI_File/files/OpenAPIScripMaster.json"
             data = requests.get(url).json()
             df = pd.DataFrame(data)
-            nfo = df[(df['exch_seg'] == 'NFO') & (df['name'] == 'NIFTY') & (df['instrumenttype'] == 'OPTIDX')]
+            
+            # Use dynamic name filter
+            nfo = df[(df['exch_seg'] == 'NFO') & (df['name'] == name_filter) & (df['instrumenttype'] == 'OPTIDX')]
             nfo = nfo[nfo['expiry'] != ""]
             nfo['expiry_dt'] = pd.to_datetime(nfo['expiry'], format="%d%b%Y", errors='coerce')
             self.scrip_master = nfo.dropna(subset=['expiry_dt'])
             
+            if self.scrip_master.empty:
+                self._log(f"Error: No options found in Scrip Master for {name_filter}")
+                self.running = False
+                return
+                
             nearest_expiry = self.scrip_master['expiry_dt'].min()
             self._log(f"Nearest Expiry for Options: {nearest_expiry}")
             # Keep only nearest expiry
@@ -99,27 +120,26 @@ class LiveBreakoutBot:
             now = datetime.datetime.now()
             
             # 1. Fetch ORB if not set and Time is past 09:20
-            # For robustness, we check time. If past 09:20, we can fetch 09:15-09:20 candle
             if not self.orb_high and now.hour >= 9 and now.minute >= 20:
-                self._log("Fetching 5-min ORB candle data (09:15 - 09:20)...")
+                self._log(f"Fetching 5-min ORB candle data for {self.symbol} (09:15 - 09:20)...")
                 try:
-                    # Using Nifty 50 Index (Token 99926000) for clean pricing
+                    # Using the actual symbol and token provided in __init__
                     params = {
-                        "exchange": "NSE", 
-                        "tradingsymbol": "Nifty 50", 
-                        "symboltoken": "99926000",
+                        "exchange": self.exchange, 
+                        "tradingsymbol": self.symbol, 
+                        "symboltoken": self.token,
                         "interval": "FIVE_MINUTE",
                         "fromdate": now.strftime("%Y-%m-%d 09:15"),
                         "todate": now.strftime("%Y-%m-%d 09:20"),
                     }
                     res = self.smart_api.getCandleData(params)
-                    if res and res.get('data') and len(res['data']) > 0:
+                    if res and res.get('status') and res.get('data') and len(res['data']) > 0:
                         candle = res['data'][0] # first candle 
                         self.orb_high = float(candle[2]) # High
                         self.orb_low = float(candle[3])  # Low
                         self._log(f"ORB Set -> High: {self.orb_high:.2f}, Low: {self.orb_low:.2f}")
                     else:
-                        self._log("Warning: No candle data found for ORB yet.")
+                        self._log(f"Warning: No candle data found for {self.symbol} ORB yet.")
                 except Exception as e:
                     self._log(f"Error fetching ORB data: {e}")
                     
@@ -194,8 +214,8 @@ class LiveBreakoutBot:
                                 opt_type = "CE" if is_buy else "PE"
                                 action_label = "BREAKOUT" if is_buy else "BREAKDOWN"
                                 
-                                atm_strike = round(index_ltp / 50) * 50
-                                strike_str = f"{atm_strike}00.000000"
+                                atm_strike = round(index_ltp / strike_step) * strike_step
+                                strike_str = f"{atm_strike * 100:.6f}"
                                 
                                 # Search for the option
                                 opt_df = self.scrip_master[
@@ -207,7 +227,7 @@ class LiveBreakoutBot:
                                     self.trade_symbol = opt_df.iloc[0]['symbol']
                                     self.trade_token = opt_df.iloc[0]['token']
                                     
-                                    self._log(f"{action_label}! Index: {index_ltp}. Selected Option: {self.trade_symbol} (ATM: {atm_strike})")
+                                    self._log(f"{action_label}! {self.symbol}: {index_ltp}. ATM Option: {self.trade_symbol} (Strike: {atm_strike})")
                                     
                                     # Get Option Premium Price
                                     opt_res = self.smart_api.ltpData(self.exchange, self.trade_symbol, self.trade_token)

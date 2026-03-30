@@ -74,12 +74,14 @@ class Nifty5MinORB(bt.Strategy):
                 
             # Break above ORB High
             if self.data.close[0] > self.orb_high:
-                self.log(f'BUY CREATE -> Breakout above ORB High: {self.orb_high}')
+                atm_strike = round(self.data.close[0] / 50) * 50
+                self.log(f'BUY CREATE -> Breakout above ORB High: {self.orb_high}. Selected ATM CE: {atm_strike}')
                 self.order = self.buy()
                 
             # Break below ORB Low
             elif self.data.close[0] < self.orb_low:
-                self.log(f'SELL CREATE -> Breakout below ORB Low: {self.orb_low}')
+                atm_strike = round(self.data.close[0] / 50) * 50
+                self.log(f'SELL CREATE -> Breakout below ORB Low: {self.orb_low}. Selected ATM PE: {atm_strike}')
                 self.order = self.sell()
                 
         # 5. Stop Loss & Target Management
