@@ -18,7 +18,7 @@ st.set_page_config(page_title="Algorithmic Trading Dashboard", layout="wide", pa
 st.title("Algorithmic Trading Dashboard")
 
 st.sidebar.header("Navigation")
-page = st.sidebar.radio("Go to", ["Dashboard", "Watchlist", "Backtesting", "Live Trading", "Settings"])
+page = st.sidebar.radio("Go to", ["Dashboard", "Portfolio", "Watchlist", "Backtesting", "Live Trading", "Settings"])
 
 if "smart_api" not in st.session_state:
     st.session_state.smart_api = None
@@ -69,6 +69,111 @@ if page == "Dashboard":
         except Exception as e:
             st.error(f"Could not load alerts: {e}")
             
+elif page == "Portfolio":
+    st.subheader("Your Trading Portfolio")
+    
+    if not st.session_state.smart_api:
+        st.warning("Please connect SmartAPI from the Dashboard to view your portfolio.")
+        if st.button("Go to Dashboard"):
+            st.query_params["page"] = "Dashboard" # This might not work exactly this way in older st, but it's a hint
+            # Better way: just tell them.
+    else:
+        # Refresh button
+        col_ref, col_empty = st.columns([1, 4])
+        with col_ref:
+            refresh = st.button("🔄 Refresh Data")
+            
+        try:
+            with st.spinner("Fetching portfolio data..."):
+                # Fetch data
+                holdings_res = st.session_state.smart_api.holding()
+                positions_res = st.session_state.smart_api.position()
+                order_book_res = st.session_state.smart_api.orderBook()
+                rms_res = st.session_state.smart_api.rmsLimit()
+                
+                # Extract data safely
+                holdings = holdings_res.get('data', []) if holdings_res and holdings_res.get('status') else []
+                positions = positions_res.get('data', []) if positions_res and positions_res.get('status') else []
+                orders = order_book_res.get('data', []) if order_book_res and order_book_res.get('status') else []
+                rms = rms_res.get('data', {}) if rms_res and rms_res.get('status') else {}
+
+                # --- Summary Metrics ---
+                total_mtm = 0.0
+                if positions:
+                    for pos in positions:
+                        try:
+                            m2m = float(pos.get('m2m', 0))
+                            total_mtm += m2m
+                        except: pass
+                
+                total_holding_value = 0.0
+                if holdings:
+                    for hld in holdings:
+                        try:
+                            # Holding value calculation (generic keys usually included)
+                            qty = int(hld.get('quantity', 0))
+                            ltp = float(hld.get('ltp', 0))
+                            total_holding_value += (qty * ltp)
+                        except: pass
+                
+                available_margin = rms.get('net', '0')
+                used_margin = rms.get('utilizedmargin', '0')
+
+                m1, m2, m3, m4 = st.columns(4)
+                m1.metric("Total MTM", f"₹{total_mtm:,.2f}", delta=f"{total_mtm:,.2f}", delta_color="normal")
+                m2.metric("Holding Value", f"₹{total_holding_value:,.2f}")
+                m3.metric("Available Margin", f"₹{float(available_margin):,.2f}")
+                m4.metric("Used Margin", f"₹{float(used_margin):,.2f}")
+
+                st.markdown("---")
+
+                # --- Tabs ---
+                tab1, tab2, tab3 = st.tabs(["📊 Positions", "📂 Holdings", "📝 Order Book"])
+
+                with tab1:
+                    if positions:
+                        # Convert to DataFrame and style
+                        df_pos = pd.DataFrame(positions)
+                        # Filter/Select relevant columns
+                        cols = ['tradingsymbol', 'symboltoken', 'netqty', 'buyavgprice', 'sellavgprice', 'ltp', 'm2m', 'pnl']
+                        df_pos = df_pos[cols] if all(c in df_pos.columns for c in cols) else df_pos
+                        
+                        # Custom styling for P&L
+                        def color_pnl(val):
+                            color = 'green' if float(val) >= 0 else 'red'
+                            return f'color: {color}'
+                        
+                        st.dataframe(df_pos.style.applymap(color_pnl, subset=['pnl', 'm2m']), use_container_width=True)
+                    else:
+                        st.info("No active positions.")
+
+                with tab2:
+                    if holdings:
+                        df_hld = pd.DataFrame(holdings)
+                        # Filter/Select relevant columns
+                        h_cols = ['tradingsymbol', 'symboltoken', 'quantity', 'isin', 'ltp', 'close']
+                        df_hld = df_hld[h_cols] if all(c in df_hld.columns for c in h_cols) else df_hld
+                        st.dataframe(df_hld, use_container_width=True)
+                    else:
+                        st.info("No holdings found.")
+
+                with tab3:
+                    if orders:
+                        df_orders = pd.DataFrame(orders)
+                        # Filter/Select relevant columns
+                        o_cols = ['orderid', 'tradingsymbol', 'transactiontype', 'orderstatus', 'averageprice', 'quantity', 'ordertime']
+                        df_orders = df_orders[o_cols] if all(c in df_orders.columns for c in o_cols) else df_orders
+                        # Sort by time
+                        if 'ordertime' in df_orders.columns:
+                            df_orders = df_orders.sort_values(by='ordertime', ascending=False)
+                        st.dataframe(df_orders, use_container_width=True)
+                    else:
+                        st.info("No orders for today.")
+
+        except Exception as e:
+            st.error(f"Error fetching portfolio data: {e}")
+            st.exception(e) # Show full traceback for debugging
+
 elif page == "Watchlist":
     st.subheader("Live Market Watchlist")
     st.write("Add Index, Stocks, or Options to track their Last Traded Price (LTP).")
