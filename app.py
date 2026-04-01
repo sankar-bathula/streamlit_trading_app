@@ -11,6 +11,7 @@ from src.auth import connect_smartapi
 from src.backtester import run_backtest
 from src.live_breakout import LiveBreakoutBot
 from src.strategies.doji_snr_live import LiveDojiSnRBot
+from src.utils import get_index_quotes, render_market_row
 import time
 
 st.set_page_config(page_title="Algorithmic Trading Dashboard", layout="wide", page_icon="📈")
@@ -30,6 +31,13 @@ if "watchlist" not in st.session_state:
     st.session_state.watchlist = []
 
 if page == "Dashboard":
+    # Market Overview
+    if st.session_state.smart_api:
+        with st.container():
+            index_data = get_index_quotes(st.session_state.smart_api)
+            render_market_row(index_data)
+            st.markdown("---")
+
     st.subheader("Live Market Status")
     
     col1, col2 = st.columns(2)
@@ -176,6 +184,13 @@ elif page == "Portfolio":
 
 elif page == "Watchlist":
     st.subheader("Live Market Watchlist")
+    
+    # Market Overview at the top of Watchlist too
+    if st.session_state.smart_api:
+        index_data = get_index_quotes(st.session_state.smart_api)
+        render_market_row(index_data)
+        st.markdown("---")
+        
     st.write("Add Index, Stocks, or Options to track their Last Traded Price (LTP).")
     
     with st.form("add_watchlist_form", clear_on_submit=True):
