@@ -12,3 +12,4 @@ logzero
 yfinance
 matplotlib
 anthropic
+google-generativeai

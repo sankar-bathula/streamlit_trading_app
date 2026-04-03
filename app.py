@@ -12,6 +12,7 @@ from src.backtester import run_backtest
 from src.live_breakout import LiveBreakoutBot
 from src.strategies.doji_snr_live import LiveDojiSnRBot
 from src.utils import get_index_quotes, render_market_row
+from src.gemini_agent import GeminiAgent
 import time
 
 st.set_page_config(page_title="Algorithmic Trading Dashboard", layout="wide", page_icon="📈")
@@ -136,7 +137,7 @@ elif page == "Portfolio":
                 st.markdown("---")
 
                 # --- Tabs ---
-                tab1, tab2, tab3 = st.tabs(["📊 Positions", "📂 Holdings", "📝 Order Book"])
+                tab1, tab2, tab3, tab4 = st.tabs(["📊 Positions", "📂 Holdings", "📝 Order Book", "🤖 AI Analysis"])
 
                 with tab1:
                     if positions:
@@ -177,6 +178,65 @@ elif page == "Portfolio":
                         st.dataframe(df_orders, use_container_width=True)
                     else:
                         st.info("No orders for today.")
+
+                with tab4:
+                    st.write("### AI Portfolio Recommendation")
+                    st.write("Click the button below to analyze your current holdings using Google Gemini AI.")
+                    
+                    if not holdings:
+                        st.warning("You need active holdings for AI analysis.")
+                    else:
+                        if st.button("🚀 Run AI Analysis", type="primary"):
+                            with st.spinner("Gemini is analyzing your portfolio strategy..."):
+                                try:
+                                    agent = GeminiAgent()
+                                    # Prepare holdings for LLM
+                                    h_data = [] # simplify data for prompt
+                                    for h in holdings:
+                                        try:
+                                            # Calculate P&L %
+                                            avg_price = float(h.get('averageprice', 0))
+                                            ltp = float(h.get('ltp', 0))
+                                            pnl_pct = ((ltp - avg_price) / avg_price * 100) if avg_price > 0 else 0
+                                            
+                                            h_data.append({
+                                                "tradingsymbol": h.get('tradingsymbol'),
+                                                "quantity": h.get('quantity'),
+                                                "avg_price": avg_price,
+                                                "ltp": ltp,
+                                                "pnl_pct": f"{pnl_pct:.2f}%"
+                                            })
+                                        except: pass
+                                        
+                                    result = agent.analyze_portfolio(h_data)
+                                    
+                                    if "error" in result:
+                                        st.error(f"Analysis Error: {result['error']}")
+                                    else:
+                                        # Display Summary Metrics
+                                        c1, c2 = st.columns([1, 4])
+                                        with c1:
+                                            st.metric("Risk Rating", result.get('risk_rating', 'N/A'))
+                                        with c2:
+                                            st.info(result.get('summary', 'No summary provided.'))
+                                            
+                                        # Display Recommendations
+                                        recs = result.get('recommendations', [])
+                                        if recs:
+                                            df_recs = pd.DataFrame(recs)
+                                            
+                                            # Styling for the action column
+                                            def highlight_action(action):
+                                                color = 'lightgreen' if 'BUY' in action.upper() else 'pink' if 'SELL' in action.upper() else 'lightblue'
+                                                return f'background-color: {color}; color: black; font-weight: bold;'
+                                            
+                                            st.table(df_recs) # Tables look better for reports
+                                        else:
+                                            st.warning("No specific recommendations returned.")
+                                            
+                                except Exception as e:
+                                    st.error(f"Failed to generate analysis: {e}")
+                                    st.exception(e)
 
         except Exception as e:
             st.error(f"Error fetching portfolio data: {e}")

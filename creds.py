@@ -10,3 +10,4 @@ telegram_chat_id = ""
 
 # AI Agent (Optional)
 anthropic_api_key = ""
+google_api_key = ""
